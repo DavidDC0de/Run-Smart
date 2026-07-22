@@ -4,7 +4,7 @@ from jose import JWTError, jwt
 from datetime import timedelta, datetime
 from . import database
 from app import schemas
-from app.models.user import User
+from app.models.UserModel import User
 from fastapi import Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -50,7 +50,7 @@ def get_current_user(token: str = Depends(oauth2_schemas),db: Session = Depends(
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def hash(password: str):
+def hash_password(password: str):
     return pwd_context.hash(password)
     
 def verify(password: str, hashed: str):
