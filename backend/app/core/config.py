@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     algorithm: str
     access_token_expire_minutes: int
 
+    strava_client_id: str
+    strava_client_secret: str
+
     class Config:
         env_file = ".env"
 
