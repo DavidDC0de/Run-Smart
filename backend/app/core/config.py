@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     strava_client_id: str
     strava_client_secret: str
+    strava_redirect_uri: str
 
     class Config:
         env_file = ".env"

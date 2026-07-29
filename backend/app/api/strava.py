@@ -6,25 +6,52 @@ from app.core.config import settings
 from app.core.security import get_current_user
 from app.models.UserModel import User
 import httpx
+from datetime import datetime
 
 router = APIRouter(prefix="/strava", tags=["strava"])
-#current_user: User = Depends(get_current_user)
+
+
 @router.get("/connect")
-def connect_strava():
+def connect_strava(current_user: User = Depends(get_current_user)):
     strava_auth_url = (
-        f"https://www.strava.com/oauth/authorize"   #strava oauth
-        f"?client_id={settings.strava_client_id}"   #which app is requesting the data
-        f"&redirect_uri=http://localhost:8000/strava/callback"   #redirect user
-        f"&response_type=code"   #request code back from strava
-        f"&scope=activity:read_all"   #permission
+        "https://www.strava.com/oauth/authorize"
+        f"?client_id={settings.strava_client_id}"
+        "&response_type=code"
+        f"&redirect_uri={settings.strava_redirect_uri}"
+        "&approval_prompt=force"
+        "&scope=activity:read_all"
+        f"&state={current_user.id}"
     )
     return RedirectResponse(strava_auth_url)
 
+'''
+FOR TESTING ONLY:
+@router.get("/connect")
+def connect_strava(token: str, db: Session = Depends(get_db)):
+    from app.core.security import verify_access_token
+    from fastapi import HTTPException, status
+    credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+    user_id = verify_access_token(token, credentials_exception)
+    
+    strava_auth_url = (
+        "https://www.strava.com/oauth/authorize"
+        f"?client_id={settings.strava_client_id}"
+        "&response_type=code"
+        f"&redirect_uri={settings.strava_redirect_uri}"
+        "&approval_prompt=force"
+        "&scope=activity:read_all"
+        f"&state={user_id.id}"
+    )
+    return RedirectResponse(strava_auth_url)
+'''
 
 @router.get("/callback")
-def strava_callback(code: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def strava_callback(code: str, state: int, db: Session = Depends(get_db)):
+    user_id = int(state)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     
-    # Exchange code for tokens
     response = httpx.post(
         "https://www.strava.com/oauth/token",
         data={
@@ -37,10 +64,10 @@ def strava_callback(code: str, db: Session = Depends(get_db), current_user: User
     
     token_data = response.json()
     
-    # Save tokens to user in database
-    current_user.strava_access_token = token_data["access_token"]
-    current_user.strava_refresh_token = token_data["refresh_token"]
-    current_user.strava_athlete_id = str(token_data["athlete"]["id"])
+    user.strava_access_token = token_data["access_token"]
+    user.strava_refresh_token = token_data["refresh_token"]
+    user.strava_athlete_id = str(token_data["athlete"]["id"])
+    user.strava_token_expires_at = datetime.fromtimestamp(token_data["expires_at"])
     
     db.commit()
     

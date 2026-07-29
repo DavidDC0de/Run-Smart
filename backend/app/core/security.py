@@ -3,7 +3,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import timedelta, datetime
 from . import database
-from app import schemas
+from app.schemas import UserSchema
 from app.models.UserModel import User
 from fastapi import Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -34,7 +34,7 @@ def verify_access_token(token: str, credentials_exception):
         if id is None:
             raise credentials_exception
     
-        token_data = schemas.TokenData(id=id)
+        token_data = UserSchema.TokenData(id=id)
         
     except JWTError:
         raise credentials_exception
