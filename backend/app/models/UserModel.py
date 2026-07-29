@@ -9,3 +9,7 @@ class User(Base):
     password = Column(String, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
 
+    strava_access_token = Column(String, nullable=True)
+    strava_refresh_token = Column(String, nullable=True)
+    strava_token_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    strava_athlete_id = Column(String, nullable=True)
