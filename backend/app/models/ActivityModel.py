@@ -21,6 +21,6 @@ class Activity(Base):
     heart_rate_zone_4_minutes = Column(Integer, nullable=False)
     heart_rate_zone_5_minutes = Column(Integer, nullable=False)
 
-    activity_type = Column(String, nullable=False)
+    activity_type = Column(String, nullable=True)
     perceived_effort = Column(Integer)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'))

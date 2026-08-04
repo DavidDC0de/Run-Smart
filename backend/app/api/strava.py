@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
+from app.services.strava import get_strava_activities
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.config import settings
@@ -70,5 +71,15 @@ def strava_callback(code: str, state: int, db: Session = Depends(get_db)):
     user.strava_token_expires_at = datetime.fromtimestamp(token_data["expires_at"])
     
     db.commit()
+    db.refresher(user)
+
+    activities = get_strava_activities(user, db)
     
-    return {"message": "Strava connected successfully"}
+    return {"message": "Strava connected successfully", "activities found:": len(activities)}
+
+@router.get("/sync")
+def sync_activities(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    activities = get_strava_activities(current_user, db)
+    
+
+    return {"activities_found": str(activities)}
