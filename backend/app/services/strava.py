@@ -43,61 +43,61 @@ def get_strava_activities(user: User, db: Session):
     refresh_token_if_needed(user, db)
 
     headers = {"Authorization": f"Bearer {user.strava_access_token}"}
-    response = httpx.get(
+    activity_response = httpx.get(
         "https://www.strava.com/api/v3/athlete/activities",
         headers=headers,
         params={"per_page": 100}
     )
+   
+    process_activity(activity_response.json(), user, db)
+    return activity_response
 
-    return response
+def process_activity(raw_activity: dict, user: User, db: Session):
+    
+    for run in raw_activity:
+        
+        # check if activity already exists to avoid duplicates
+        existing = db.query(Activity).filter(Activity.activity_id == run["id"]).first()
+        if existing:
+            continue
+            
+        # get heart rate zones
+        headers = {"Authorization": f"Bearer {user.strava_access_token}"}
+        zones_response = httpx.get(
+            f"https://www.strava.com/api/v3/activities/{run['id']}/zones",
+            headers=headers,
+        )
+        zones = zones_response.json()
+        
+        zone_1 = zone_2 = zone_3 = zone_4 = zone_5 = 0
+        for zone_type in zones:
+            if zone_type.get("type") == "heartrate":
+                buckets = zone_type.get("distribution_buckets", [])
+                if len(buckets) >= 5:
+                    zone_1 = buckets[0]["time"] / 60
+                    zone_2 = buckets[1]["time"] / 60
+                    zone_3 = buckets[2]["time"] / 60
+                    zone_4 = buckets[3]["time"] / 60
+                    zone_5 = buckets[4]["time"] / 60
 
-def process_activity(raw_activity: dict, user_id: int):
-    # convert raw Strava fields to your table fields
-    # distance meters to km
-    # moving_time seconds to minutes
-    # calculate pace from speed
-    # return Activity object ready to save
-    pass
+        new_activity = Activity(
+            activity_id=run["id"],
+            user_id=user.id,
+            date=run["start_date"],
+            distance_meters=run["distance"],
+            duration_minutes=run["moving_time"] / 60,
+            total_elevation_gain=run["total_elevation_gain"],
+            average_pace_seconds=(run["moving_time"] / (run["distance"] / 1000)) if run["distance"] > 0 else 0,
+            max_heart_rate=run.get("max_heartrate", 0),
+            heart_rate_zone_1_minutes=zone_1,
+            heart_rate_zone_2_minutes=zone_2,
+            heart_rate_zone_3_minutes=zone_3,
+            heart_rate_zone_4_minutes=zone_4,
+            heart_rate_zone_5_minutes=zone_5,
+        )
+        
+        db.add(new_activity)
+    
+    db.commit()
 
-def sync_all_activities(user: User, db: Session):
-    # call get_strava_activities
-    # loop through each one
-    # call process_activity on each
-    # save to database
-    # skip if activity_id already exists to avoid duplicates
-    pass
-
-
-
-'''
-{"https://www.strava.com/api/v3/activities/130058894?include_all_efforts=true"}
-{
-    "id"
-    "start_date"
-    "distance"
-    "moving_time"
-    "total_elevation_gain"
-    "average_speed" #m/sec
-}
-{"$ http get "https://www.strava.com/api/v3/activities/{id}/zones" "Authorization: Bearer [[token]]""} #not sure how to find how much time was spent in each zone
-
-[ {
-  "score" : 0,
-  "sensor_based" : true,
-  "custom_zones" : true,
-  "max" : 1,
-  "distribution_buckets" : "",
-  "type" : "heartrate",
-  "points" : 6
-} ]
-'''
-
-#after that is activity_type there is no way to get that from strava so when initially loading all info its all gonna be just 
-#blank ... i will need to figure out a way to tell what is a long run, easy run, tempo and all that 
-#that way if a user wants to change their programm and feed it back inot the ai the ai can see what was an easy run or a tempo and so on...
-
-#next field is percieved effort this ties in with activity type, i think when i originally save the data from strava it will be blank
-#however if this is a run which was done on my app where users can selct the effort i will save that localluy for a bit and then add it to the table
-#meaning that i can do the same with activity type
-
-#next field is created at, this will stay blank for all the strava initial connect but then i can add this with every new run that was done through my app
+    
