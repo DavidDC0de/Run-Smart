@@ -24,6 +24,7 @@ if config.config_file_name is not None:
 from app.models.UserModel import User
 from app.models.ActivityModel import Activity
 from app.models.PlanModel import TrainingPlan
+from app.models.SessionModel import Session
 from app.core.database import Base
 target_metadata = Base.metadata
 

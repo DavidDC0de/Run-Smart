@@ -7,7 +7,7 @@ class TrainingPlan(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     goal_race_km = Column(Integer, nullable=False)
-    goal_time_min = Column(Float, nullable=False)
+    goal_time_min = Column(Float, nullable=True)
     race_date = Column(TIMESTAMP(timezone=True), nullable=False)
     weeks_until_race = Column(Integer, nullable=False)
     training_days_per_week = Column(Integer, nullable=False)
