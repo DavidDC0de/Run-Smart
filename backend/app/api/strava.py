@@ -81,5 +81,4 @@ def strava_callback(code: str, state: int, db: Session = Depends(get_db)):
 def sync_activities(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     activities = get_strava_activities(current_user, db)
     
-
     return {"activities_found": str(activities)}
