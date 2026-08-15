@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     strava_client_secret: str
     strava_redirect_uri: str
 
+    open_ai_key: str
+
     class Config:
         env_file = ".env"
 

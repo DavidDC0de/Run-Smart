@@ -1,12 +1,11 @@
 
 from sqlalchemy.orm import Session
-from datetime import timedelta, datetime
-
+from datetime import timedelta, datetime, date
 
 from app.models.ActivityModel import Activity
 from app.schemas.PlanSchema import GeneratePlan
 
-def calculate_fitness_summary(user_id: int, db: Session):
+def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
 
     cutoff = datetime.now(datetime.now().tzinfo) - timedelta(days=365)
     running_data = db.query(Activity).filter(Activity.user_id == user_id,
@@ -76,9 +75,24 @@ def calculate_fitness_summary(user_id: int, db: Session):
         else None
     )
 
+  
+    ################################################
+    #week untill race
+    ################################################
+
+    today = date.today()
+
+    days_until_race = (user_plan_info.race_date - today).days
+
+    if days_until_race <= 0:
+        return 0
+
+    weeks_untill_race = days_until_race // 7
+
     #################################################
     #training consistancy 
     #################################################
+
 
     now = datetime.now().date()
 
@@ -108,7 +122,21 @@ def calculate_fitness_summary(user_id: int, db: Session):
                                             training_consistency,
                                             zone_2_percentage)
 
-    return [avg_weekly_km, avg_pace_sec_per_km, longest_recent_run_km, zone_2_percentage, training_consistency, fitness_score]
+    return {
+          "average_weekly_km": avg_weekly_km, 
+          "average_pace_sec_per_km": avg_pace_sec_per_km,
+          "longest_recent_run_km": longest_recent_run_km, 
+          "zone_2_percentage": zone_2_percentage, 
+          "training_consistancy": training_consistency, 
+          "fitness_score": fitness_score,
+          "goal_race_km": user_plan_info.goal_race_km,
+          "goal_time_min": user_plan_info.goal_time_min,
+          "race_date": user_plan_info.race_date,
+          "week_untill_race": "pass",
+          "training_days_per_week": user_plan_info.training_days_per_week,
+          "available_days": user_plan_info.available_days,
+          "weeks_until_race": weeks_untill_race
+        }
 
 def calculate_fitness_score(
     avg_weekly_km: float,
