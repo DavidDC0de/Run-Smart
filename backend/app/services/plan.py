@@ -132,7 +132,6 @@ def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
           "goal_race_km": user_plan_info.goal_race_km,
           "goal_time_min": user_plan_info.goal_time_min,
           "race_date": user_plan_info.race_date,
-          "week_untill_race": "pass",
           "training_days_per_week": user_plan_info.training_days_per_week,
           "available_days": user_plan_info.available_days,
           "weeks_until_race": weeks_untill_race
