@@ -72,7 +72,7 @@ def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
     zone_2_percentage = (
         zone_2_minutes / total_zone_minutes * 100
         if total_zone_minutes > 0
-        else None
+        else "Unknown - heart rate data unavailable"
     )
 
   
@@ -87,7 +87,7 @@ def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
     if days_until_race <= 0:
         return 0
 
-    weeks_untill_race = days_until_race // 7
+    weeks_until_race = days_until_race // 7
 
     #################################################
     #training consistancy 
@@ -122,7 +122,13 @@ def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
                                             training_consistency,
                                             zone_2_percentage)
 
-    return {
+    #################################################################
+    #goal time pace
+    #################################################################
+
+    goal_time_pace =  (user_plan_info.goal_time_min * 60 )/ user_plan_info.goal_race_km
+
+    user_summary={
           "average_weekly_km": avg_weekly_km, 
           "average_pace_sec_per_km": avg_pace_sec_per_km,
           "longest_recent_run_km": longest_recent_run_km, 
@@ -134,8 +140,12 @@ def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
           "race_date": user_plan_info.race_date,
           "training_days_per_week": user_plan_info.training_days_per_week,
           "available_days": user_plan_info.available_days,
-          "weeks_until_race": weeks_untill_race
-        }
+          "weeks_until_race": weeks_until_race,
+          "goal_time_pace_sec": goal_time_pace,
+          "current_pace_per_sec": user_plan_info.current_5k_pace
+    }
+
+    return user_summary
 
 def calculate_fitness_score(
     avg_weekly_km: float,
@@ -201,7 +211,7 @@ def calculate_fitness_score(
     # 4. Zone 2 adjustment: -3 to +3
     # ---------------------------------------------------------
 
-    if zone_2_percentage is None:
+    if zone_2_percentage is not int:
         zone_2_adjustment = 0
 
     elif zone_2_percentage < 40:
@@ -231,3 +241,409 @@ def calculate_fitness_score(
     )
 
     return round(max(1, min(100, score)))
+
+#######################################################
+#generate training plan
+########################################################
+
+def generate_training_plan(summary):
+
+    total_weeks = summary["weeks_until_race"]
+    race_distance = summary["goal_race_km"]
+    training_days = summary["training_days_per_week"]
+
+    phases = determine_phases(total_weeks)
+
+    starting_volume = calculate_starting_volume(summary)
+
+    paces = calculate_training_paces(
+        summary["goal_time_pace_sec"],
+        summary["average_pace_sec_per_km"],
+        summary["current_pace_per_sec"]
+    )
+
+    plan = []
+
+    previous_volume = starting_volume
+    previous_long_run = starting_volume * 0.4
+
+    for week_number in range(1, total_weeks + 1):
+
+        phase = determine_week_phase(
+            week_number,
+            phases
+        )
+
+        weekly_volume = calculate_weekly_volume(
+            starting_volume,
+            week_number,
+            previous_volume,
+            phase
+        )
+
+        long_run = calculate_long_run(
+            previous_long_run,
+            week_number,
+            race_distance,
+            phase
+        )
+
+        sessions = generate_week_sessions(
+            week_number=week_number,
+            weekly_volume=weekly_volume,
+            long_run=long_run,
+            training_days=training_days,
+            available_days=summary["available_days"],
+            phase=phase,
+            paces=paces,
+            current_pace=summary["current_pace_per_sec"],
+            goal_pace=summary["goal_time_pace_sec"],
+            total_weeks=summary["weeks_until_race"]
+        )
+
+        plan.append({
+            "week_number": week_number,
+            "phase": phase,
+            "total_km": round(weekly_volume, 1),
+            "sessions": sessions
+        })
+
+        if not is_recovery_week(week_number, phase):
+            previous_volume = weekly_volume
+            previous_long_run = long_run
+
+    return plan
+
+########################################################
+# break the total nr of weeks into stages
+#######################################################
+
+def determine_phases(total_weeks):
+    taper_weeks = 2
+    remaining = total_weeks - taper_weeks
+
+    base_weeks = max(2, round(remaining * 0.30))
+    build_weeks = max(2, round(remaining * 0.40))
+    race_weeks = remaining - base_weeks - build_weeks
+
+    return {
+        "base": base_weeks,
+        "build": build_weeks,
+        "race_specific": race_weeks,
+        "taper": taper_weeks
+    }
+
+def determine_week_phase(week_number, phases):
+    base_end = phases["base"]
+
+    build_end = base_end + phases["build"]
+
+    race_end = build_end + phases["race_specific"]
+
+    if week_number <= base_end:
+        return "base"
+
+    if week_number <= build_end:
+        return "build"
+
+    if week_number <= race_end:
+        return "race_specific"
+
+    return "taper"
+
+def is_recovery_week(week_number, phase):
+    if phase == "taper":
+        return False
+
+    return week_number % 4 == 0
+
+##################################################
+# calculate starting volume
+##################################################
+
+def calculate_starting_volume(summary):
+    average = summary["average_weekly_km"]
+    consistency = summary["training_consistancy"]
+    longest_run = summary["longest_recent_run_km"]
+
+    if consistency <= 2:
+        # Detrained runner
+        return min(average * 2, longest_run * 2, 20)
+
+    return average
+
+###################################################
+# calculate the paces to train at 
+###################################################
+
+def calculate_training_paces(goal_pace, average_pace, current_pace):
+
+    current_pace = min(current_pace, average_pace + 60)
+
+    pace_gap = max(0, current_pace - goal_pace)
+  
+    # Start training paces from current fitness
+    easy = current_pace + 60
+    long_run = current_pace + 45
+    
+
+    # Quality sessions sit between current fitness and goal pace
+    tempo = current_pace - (pace_gap * 0.10)
+    interval = current_pace - (pace_gap * 0.20)
+
+    return {
+        "easy": round(easy),
+        "long_run": round(long_run),
+        "tempo": round(tempo),
+        "race": round(goal_pace),
+        "interval": round(interval),
+    }
+
+#################################################
+#calculate weekly volume progression
+#################################################
+
+def calculate_weekly_volume(
+    starting_volume,
+    week_number,
+    previous_volume,
+    phase
+):
+    if week_number == 1:
+        return starting_volume
+
+    # Recovery week
+    if is_recovery_week(week_number, phase):
+        return previous_volume * 0.80
+
+    # Taper
+    if phase == "taper":
+        return previous_volume * 0.70
+
+    # Base phase
+    if phase == "base":
+        return previous_volume * 1.05
+
+    # Build phase
+    if phase == "build":
+        return previous_volume * 1.08
+
+    # Race-specific phase
+    if phase == "race_specific":
+        return previous_volume * 1.05
+
+    return previous_volume
+
+##################################################
+#choose between tempo and interval weekly for quality session
+#################################################
+
+def choose_quality_session(week_number):
+    if week_number % 2 == 0:
+        return "tempo"
+
+    return "interval"
+
+######################################################
+#calculate log run distance graduatly increasing
+######################################################
+
+def calculate_long_run(
+    previous_long_run,
+    week_number,
+    race_distance,
+    phase
+):
+    if phase == "recovery":
+        return previous_long_run * 0.8
+
+    if phase == "taper":
+        return previous_long_run * 0.7
+
+    long_run = previous_long_run * 1.08
+
+    # Don't let it exceed the race-specific ceiling
+    max_long_run = race_distance * 0.9
+
+    return min(long_run, max_long_run)
+
+##############################################################
+#calculate increase in pace 
+#############################################################
+
+def progress_training_pace(
+    base_pace,
+    current_pace,
+    goal_pace,
+    week_number,
+    total_weeks,
+    workout_type,
+    phase
+):
+    max_progression = {
+        "easy": 0.15,
+        "long_run": 0.10,
+        "tempo": 0.55,
+        "interval": 0.85,
+        "race": 1.00,
+    }
+
+    target_progression = max_progression.get(workout_type, 0.15)
+
+    # Slow progression during base,
+    # normal progression during build,
+    # strongest progression during race-specific phase.
+    phase_multiplier = {
+        "base": 0.5,
+        "build": 1.1,
+        "race_specific": 1.2,
+        "taper": 0.0,
+    }
+
+    multiplier = phase_multiplier.get(phase, 1.0)
+
+    progress = min(week_number / total_weeks, 1.0)
+
+    pace_gap = max(0, current_pace - goal_pace)
+
+    improvement = (
+        pace_gap
+        * target_progression
+        * progress
+        * multiplier
+    )
+
+    progressed_pace = base_pace - improvement
+
+    return round(progressed_pace)
+
+################################################################
+#generate weekly sessions
+################################################################
+
+def generate_week_sessions(
+    week_number,
+    weekly_volume,
+    long_run,
+    training_days,
+    available_days,
+    phase,
+    paces,
+    current_pace,
+    goal_pace,
+    total_weeks
+):
+    quality_type = choose_quality_session(week_number)
+
+    def get_pace(workout_type):
+        return progress_training_pace(
+            base_pace=paces[workout_type],
+            current_pace=current_pace,
+            goal_pace=goal_pace,
+            week_number=week_number,
+            total_weeks=total_weeks,
+            workout_type=workout_type,
+            phase=phase
+        )
+
+    if training_days == 3:
+
+        easy_km = weekly_volume * 0.30
+        quality_km = weekly_volume * 0.25
+
+        return [
+            {
+                "day": available_days[0],
+                "type": "easy",
+                "distance_km": round(easy_km, 1),
+                "pace_sec_per_km": get_pace("easy")
+            },
+            {
+                "day": available_days[1],
+                "type": quality_type,
+                "distance_km": round(quality_km, 1),
+                "pace_sec_per_km": get_pace(quality_type)
+            },
+            {
+                "day": available_days[2],
+                "type": "long_run",
+                "distance_km": round(long_run, 1),
+                "pace_sec_per_km": get_pace("long_run")
+            }
+        ]
+
+    if training_days == 4:
+
+        easy_km = weekly_volume * 0.20
+        quality_km = weekly_volume * 0.20
+        easy_km_2 = weekly_volume * 0.15
+
+        return [
+            {
+                "day": available_days[0],
+                "type": "easy",
+                "distance_km": round(easy_km, 1),
+                "pace_sec_per_km": get_pace("easy")
+            },
+            {
+                "day": available_days[1],
+                "type": quality_type,
+                "distance_km": round(quality_km, 1),
+                "pace_sec_per_km": get_pace(quality_type)
+            },
+            {
+                "day": available_days[2],
+                "type": "easy",
+                "distance_km": round(easy_km_2, 1),
+                "pace_sec_per_km": get_pace("easy")
+            },
+            {
+                "day": available_days[3],
+                "type": "long_run",
+                "distance_km": round(long_run, 1),
+                "pace_sec_per_km": get_pace("long_run")
+            }
+        ]
+
+    if training_days == 5:
+
+        easy_km = weekly_volume * 0.18
+        quality_km = weekly_volume * 0.18
+        easy_km_2 = weekly_volume * 0.15
+        easy_km_3 = weekly_volume * 0.14
+
+        return [
+            {
+                "day": available_days[0],
+                "type": "easy",
+                "distance_km": round(easy_km, 1),
+                "pace_sec_per_km": get_pace("easy")
+            },
+            {
+                "day": available_days[1],
+                "type": quality_type,
+                "distance_km": round(quality_km, 1),
+                "pace_sec_per_km": get_pace(quality_type)
+            },
+            {
+                "day": available_days[2],
+                "type": "easy",
+                "distance_km": round(easy_km_2, 1),
+                "pace_sec_per_km": get_pace("easy")
+            },
+            {
+                "day": available_days[3],
+                "type": "easy",
+                "distance_km": round(easy_km_3, 1),
+                "pace_sec_per_km": get_pace("easy")
+            },
+            {
+                "day": available_days[4],
+                "type": "long_run",
+                "distance_km": round(long_run, 1),
+                "pace_sec_per_km": get_pace("long_run")
+            }
+        ]
+    
+    # TO DO LIST:
+    # - available training days must be between 3 to 5

@@ -8,3 +8,4 @@ class GeneratePlan(BaseModel):
     training_days_per_week: int  # how many days can they train
     available_days: list[str]  # e.g. ["Monday", "Wednesday", "Saturday"]
     goal_time_min: Optional[float] = None  # optional goal finish time in minutes
+    current_5k_pace: Optional[float]  #currnet pace for a 5k run
