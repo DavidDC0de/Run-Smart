@@ -680,5 +680,3 @@ def generate_week_sessions(
             }
         ]
     
-    # TO DO LIST:
-    # - available training days must be between 3 to 5
