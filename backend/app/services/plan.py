@@ -5,6 +5,12 @@ from datetime import timedelta, datetime, date
 from app.models.ActivityModel import Activity
 from app.schemas.PlanSchema import GeneratePlan
 
+from app.models import SessionModel
+from app.models import PlanModel
+from app.models import UserModel
+from app.core.database import get_db
+from fastapi import Depends
+
 def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
 
     cutoff = datetime.now(datetime.now().tzinfo) - timedelta(days=365)
@@ -246,7 +252,7 @@ def calculate_fitness_score(
 #generate training plan
 ########################################################
 
-def generate_training_plan(summary):
+def generate_training_plan(user_id, summary, db: Session):
 
     total_weeks = summary["weeks_until_race"]
     race_distance = summary["goal_race_km"]
@@ -266,6 +272,20 @@ def generate_training_plan(summary):
 
     previous_volume = starting_volume
     previous_long_run = starting_volume * 0.4
+
+    #save the plan into the table 
+    save_plan = PlanModel.TrainingPlan(
+        user_id = user_id,
+        goal_race_km = summary["goal_race_km"],
+        goal_time_min = summary["goal_time_min"],
+        race_date = summary["race_date"],
+        weeks_until_race = summary["weeks_until_race"],
+        training_days_per_week = summary["training_days_per_week"]
+        )
+    
+    db.add(save_plan)
+    db.commit()
+    db.refresh(save_plan)
 
     for week_number in range(1, total_weeks + 1):
 
@@ -300,6 +320,21 @@ def generate_training_plan(summary):
             goal_pace=summary["goal_time_pace_sec"],
             total_weeks=summary["weeks_until_race"]
         )
+
+        #save in the table for every session in a week
+        for s in sessions:
+            save_session = SessionModel.Session(
+            plan_id = save_plan.id,
+            week_number = week_number,
+            day_of_week = s["day"],
+            session_type = s["type"],
+            target_distance = s["distance_km"],
+            target_pace = s["pace_sec_per_km"]
+            )
+
+            db.add(save_session)
+            db.commit()
+            db.refresh(save_session)
 
         plan.append({
             "week_number": week_number,

@@ -19,7 +19,7 @@ def generate_plan(user_plan_info: GeneratePlan,
     user_summary = calculate_fitness_summary(current_user.id, db, user_plan_info)
 
     #generate a full training programme 
-    training_plan = generate_training_plan(user_summary)
+    training_plan = generate_training_plan(current_user.id, user_summary, db)
     
     #explain week by week using ai
     explanation = explaining_programme_ai(

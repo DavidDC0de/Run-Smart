@@ -4,7 +4,7 @@ from sqlalchemy import TIMESTAMP, Column, ForeignKey, Integer, String, Boolean, 
 class TrainingPlan(Base):
     __tablename__ = "TrainingPlan"
 
-    id = Column(Integer, primary_key=True, nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     goal_race_km = Column(Integer, nullable=False)
     goal_time_min = Column(Float, nullable=True)
