@@ -11,6 +11,11 @@ from app.models import UserModel
 from app.core.database import get_db
 from fastapi import Depends
 
+
+#----------------------------------------------------
+# calculate fitness summary for when user is connected to strava
+#------------------------------------------------------
+
 def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
 
     cutoff = datetime.now(datetime.now().tzinfo) - timedelta(days=365)
@@ -153,6 +158,40 @@ def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
 
     return user_summary
 
+#---------------------------------------------------------------------
+#calculate fitness summary for when user does not have fitness hitory
+#-------------------------------------------------------------------
+
+def build_manual_fitness_summary(manual_input):
+    today = date.today()
+    days_until_race = (manual_input.race_date - today).days
+    if days_until_race <= 0:
+        return 0
+
+    fitness_score = calculate_fitness_score(
+        avg_weekly_km=manual_input.average_weekly_km,
+        longest_run_km=manual_input.longest_run_km,
+        training_consistency=manual_input.weeks_trained_last_8,
+        zone_2_percentage="Unknown - heart rate data unavailable",
+    )
+
+    return {
+        "average_weekly_km": manual_input.average_weekly_km,
+        "average_pace_sec_per_km": manual_input.longest_run_pace,  
+        "longest_recent_run_km": manual_input.longest_run_km,
+        "zone_2_percentage": "Unknown - heart rate data unavailable",
+        "training_consistancy": manual_input.weeks_trained_last_8,
+        "fitness_score": fitness_score,
+        "goal_race_km": manual_input.goal_race_km,
+        "goal_time_min": manual_input.goal_time_min,
+        "race_date": manual_input.race_date,
+        "training_days_per_week": manual_input.training_days_per_week,
+        "available_days": manual_input.available_days,
+        "weeks_until_race": days_until_race // 7,
+        "goal_time_pace_sec": (manual_input.goal_time_min * 60) / manual_input.goal_race_km,
+        "current_pace_per_sec": manual_input.longest_run_pace,
+    }
+
 def calculate_fitness_score(
     avg_weekly_km: float,
     longest_run_km: float,
@@ -249,7 +288,7 @@ def calculate_fitness_score(
     return round(max(1, min(100, score)))
 
 #######################################################
-#generate training plan
+#generate training plan when user has past activity on strava
 ########################################################
 
 def generate_training_plan(user_id, summary, db: Session):
@@ -403,9 +442,15 @@ def calculate_starting_volume(summary):
 
     if consistency <= 2:
         # Detrained runner
-        return min(average * 2, longest_run * 2, 20)
+        starting_volume =  min(average * 2, longest_run * 2, 20)
+        if starting_volume < 8:
+            return 8
+        
+    elif average >= 8:
+        return average
 
-    return average
+    else:
+        return 8
 
 ###################################################
 # calculate the paces to train at 

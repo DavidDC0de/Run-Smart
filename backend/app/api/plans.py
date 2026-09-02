@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.UserModel import User
-from app.schemas.PlanSchema import GeneratePlan
-from app.services.plan import calculate_fitness_summary, generate_training_plan
+from app.schemas.PlanSchema import GeneratePlan, GenerateManualPlan
+from app.services.plan import calculate_fitness_summary, generate_training_plan, build_manual_fitness_summary
 from app.services.AI_plan_generator import explaining_programme_ai
 
 router = APIRouter(prefix="/plans")
@@ -28,4 +28,28 @@ def generate_plan(user_plan_info: GeneratePlan,
     )
     print(explanation)
     
+    return training_plan
+
+
+@router.post("/generate_manual")
+def generate_manual_plan(plan_info_manual: GenerateManualPlan, 
+                  current_user: User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+
+    # no DB query at all
+    user_summary = build_manual_fitness_summary(plan_info_manual)  # no DB query at all
+
+    #generate a full training programme 
+    training_plan = generate_training_plan(current_user.id, user_summary, db)
+    
+    #explain week by week using ai
+    '''
+    explanation = explaining_programme_ai(
+        training_plan[0],
+        runner_context=f"- Goal: complete a {plan_info_manual.goal_race_km}\n- Recent history: this is week {training_plan[0]["week_number"]}, no prior sessions logged yet"
+    )
+    print(explanation)
+    
+    return training_plan
+    '''
     return training_plan
