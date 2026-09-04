@@ -7,7 +7,7 @@ from app.schemas.PlanSchema import GeneratePlan, GenerateManualPlan
 from app.services.plan import calculate_fitness_summary, generate_training_plan, build_manual_fitness_summary
 from app.services.AI_plan_generator import explaining_programme_ai
 
-router = APIRouter(prefix="/plans")
+router = APIRouter(prefix="/plans", tags=["Generate Plans"])
 
 
 @router.post("/generate")
@@ -43,7 +43,7 @@ def generate_manual_plan(plan_info_manual: GenerateManualPlan,
     training_plan = generate_training_plan(current_user.id, user_summary, db)
     
     #explain week by week using ai
-    '''
+    
     explanation = explaining_programme_ai(
         training_plan[0],
         runner_context=f"- Goal: complete a {plan_info_manual.goal_race_km}\n- Recent history: this is week {training_plan[0]["week_number"]}, no prior sessions logged yet"
@@ -51,5 +51,4 @@ def generate_manual_plan(plan_info_manual: GenerateManualPlan,
     print(explanation)
     
     return training_plan
-    '''
-    return training_plan
+    

@@ -7,7 +7,8 @@ from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 router = APIRouter(
-    prefix="/user"
+    prefix="/user",
+    tags=["User"]
 )
 
 @router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)

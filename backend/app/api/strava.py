@@ -9,7 +9,7 @@ from app.models.UserModel import User
 import httpx
 from datetime import datetime
 
-router = APIRouter(prefix="/strava", tags=["strava"])
+router = APIRouter(prefix="/strava", tags=["Strava"])
 
 
 @router.get("/connect")

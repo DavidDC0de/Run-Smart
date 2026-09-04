@@ -445,6 +445,8 @@ def calculate_starting_volume(summary):
         starting_volume =  min(average * 2, longest_run * 2, 20)
         if starting_volume < 8:
             return 8
+        else:
+            return starting_volume
         
     elif average >= 8:
         return average
