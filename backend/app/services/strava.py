@@ -8,6 +8,9 @@ from app.core.database import get_db
 from fastapi import Depends
 
 
+class StravaError(Exception):
+    pass
+
 def refresh_token_if_needed(user: User, db: Session):
     date_now = datetime.now(timezone.utc)
     if isinstance(user.strava_token_expires_at, datetime):
@@ -33,24 +36,29 @@ def refresh_token_if_needed(user: User, db: Session):
         token_data = response.json()
         user.strava_access_token = token_data["access_token"]
         user.strava_refresh_token = token_data["refresh_token"]
-        user.strava_token_expires_at = datetime.fromtimestamp(token_data["expires_at"])
+        user.strava_token_expires_at = datetime.fromtimestamp(token_data["expires_at"], tz=timezone.utc)
             
         db.commit()
     
 
 def get_strava_activities(user: User, db: Session):
-   
+
     refresh_token_if_needed(user, db)
 
     headers = {"Authorization": f"Bearer {user.strava_access_token}"}
     activity_response = httpx.get(
         "https://www.strava.com/api/v3/athlete/activities",
         headers=headers,
-        params={"per_page": 100}
+        params={"per_page": 100},
+        timeout=15,
     )
-   
-    process_activity(activity_response.json(), user, db)
-    return activity_response
+
+    activities = activity_response.json()
+    if activity_response.status_code != 200 or not isinstance(activities, list):
+        raise StravaError(f"Strava returned {activity_response.status_code}")
+
+    process_activity(activities, user, db)
+    return activities
 
 def process_activity(raw_activity: dict, user: User, db: Session):
     
