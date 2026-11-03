@@ -12,6 +12,10 @@ from app.core.database import get_db
 from fastapi import Depends
 
 
+
+class NotEnoughDataError(Exception):
+    pass
+
 #----------------------------------------------------
 # calculate fitness summary for when user is connected to strava
 #------------------------------------------------------
@@ -22,6 +26,11 @@ def calculate_fitness_summary(user_id: int, db: Session, user_plan_info):
     running_data = db.query(Activity).filter(Activity.user_id == user_id,
                                              Activity.date >= cutoff
                                              ).all()
+
+    if not running_data or sum(a.distance_meters for a in running_data) <= 0:
+        raise NotEnoughDataError(
+            "No Strava runs found in the last 12 months. Sync Strava first, or enter your fitness manually."
+        )
     
     #################################################
     #average weekly km:
@@ -291,14 +300,18 @@ def calculate_fitness_score(
 #generate training plan when user has past activity on strava
 ########################################################
 
-def generate_training_plan(user_id, summary, db: Session):
+def generate_training_plan(user_id, summary, db: Session) -> int:
+    """
+    Builds the full plan and saves it in a single transaction:
+    either the plan and ALL its sessions are saved, or nothing is.
+    Returns the new plan's id.
+    """
 
     total_weeks = summary["weeks_until_race"]
     race_distance = summary["goal_race_km"]
     training_days = summary["training_days_per_week"]
 
     phases = determine_phases(total_weeks)
-
     starting_volume = calculate_starting_volume(summary)
 
     paces = calculate_training_paces(
@@ -307,86 +320,67 @@ def generate_training_plan(user_id, summary, db: Session):
         summary["current_pace_per_sec"]
     )
 
-    plan = []
-
     previous_volume = starting_volume
     previous_long_run = starting_volume * 0.4
 
-    #save the plan into the table 
-    save_plan = PlanModel.TrainingPlan(
-        user_id = user_id,
-        goal_race_km = summary["goal_race_km"],
-        goal_time_min = summary["goal_time_min"],
-        race_date = summary["race_date"],
-        weeks_until_race = summary["weeks_until_race"],
-        training_days_per_week = summary["training_days_per_week"]
+    try:
+        save_plan = PlanModel.TrainingPlan(
+            user_id=user_id,
+            goal_race_km=summary["goal_race_km"],
+            goal_time_min=summary["goal_time_min"],
+            race_date=summary["race_date"],
+            weeks_until_race=summary["weeks_until_race"],
+            training_days_per_week=summary["training_days_per_week"],
         )
-    
-    db.add(save_plan)
-    db.commit()
-    db.refresh(save_plan)
+        db.add(save_plan)
+        db.flush()  # gives save_plan an id without committing yet
+        plan_id = save_plan.id
 
-    for week_number in range(1, total_weeks + 1):
+        for week_number in range(1, total_weeks + 1):
 
-        phase = determine_week_phase(
-            week_number,
-            phases
-        )
+            phase = determine_week_phase(week_number, phases)
 
-        weekly_volume = calculate_weekly_volume(
-            starting_volume,
-            week_number,
-            previous_volume,
-            phase
-        )
-
-        long_run = calculate_long_run(
-            previous_long_run,
-            week_number,
-            race_distance,
-            phase
-        )
-
-        sessions = generate_week_sessions(
-            week_number=week_number,
-            weekly_volume=weekly_volume,
-            long_run=long_run,
-            training_days=training_days,
-            available_days=summary["available_days"],
-            phase=phase,
-            paces=paces,
-            current_pace=summary["current_pace_per_sec"],
-            goal_pace=summary["goal_time_pace_sec"],
-            total_weeks=summary["weeks_until_race"]
-        )
-
-        #save in the table for every session in a week
-        for s in sessions:
-            save_session = SessionModel.Session(
-            plan_id = save_plan.id,
-            week_number = week_number,
-            day_of_week = s["day"],
-            session_type = s["type"],
-            target_distance = s["distance_km"],
-            target_pace = s["pace_sec_per_km"]
+            weekly_volume = calculate_weekly_volume(
+                starting_volume, week_number, previous_volume, phase
             )
 
-            db.add(save_session)
-            db.commit()
-            db.refresh(save_session)
+            long_run = calculate_long_run(
+                previous_long_run, week_number, race_distance, phase
+            )
 
-        plan.append({
-            "week_number": week_number,
-            "phase": phase,
-            "total_km": round(weekly_volume, 1),
-            "sessions": sessions
-        })
+            sessions = generate_week_sessions(
+                week_number=week_number,
+                weekly_volume=weekly_volume,
+                long_run=long_run,
+                training_days=training_days,
+                available_days=summary["available_days"],
+                phase=phase,
+                paces=paces,
+                current_pace=summary["current_pace_per_sec"],
+                goal_pace=summary["goal_time_pace_sec"],
+                total_weeks=summary["weeks_until_race"]
+            )
 
-        if not is_recovery_week(week_number, phase):
-            previous_volume = weekly_volume
-            previous_long_run = long_run
+            for s in sessions:
+                db.add(SessionModel.Session(
+                    plan_id=plan_id,
+                    week_number=week_number,
+                    day_of_week=s["day"],
+                    session_type=s["type"],
+                    target_distance=s["distance_km"],
+                    target_pace=s["pace_sec_per_km"]
+                ))
 
-    return plan
+            if not is_recovery_week(week_number, phase):
+                previous_volume = weekly_volume
+                previous_long_run = long_run
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return plan_id
 
 ########################################################
 # break the total nr of weeks into stages

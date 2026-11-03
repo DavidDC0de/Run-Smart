@@ -2,7 +2,7 @@ from openai import OpenAI
 from app.core.config import settings
 import json
 
-client = OpenAI(api_key=settings.open_ai_key)
+client = OpenAI(api_key=settings.open_ai_key, timeout=30)
 
 
 def explaining_programme_ai(training_week: dict, runner_context: str) -> str:

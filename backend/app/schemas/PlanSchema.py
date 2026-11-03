@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -76,3 +76,23 @@ class WeekOut(BaseModel):
     phase: Literal["base", "build", "race_specific", "taper"]
     total_km: float
     sessions: list[SessionOut]
+
+class PlanSummaryOut(BaseModel):
+    id: int
+    goal_race_km: int
+    goal_time_min: float | None
+    race_date: date
+    weeks_until_race: int
+    training_days_per_week: int
+    status: str
+    created_at: datetime
+
+
+class PlanDetailOut(PlanSummaryOut):
+    weeks: list[WeekOut]
+
+
+class ExplanationOut(BaseModel):
+    plan_id: int
+    week_number: int
+    explanation: str

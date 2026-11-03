@@ -25,6 +25,7 @@ from app.models.UserModel import User
 from app.models.ActivityModel import Activity
 from app.models.PlanModel import TrainingPlan
 from app.models.SessionModel import Session
+from app.models.ExplanationModel import WeekExplanation
 from app.core.database import Base
 target_metadata = Base.metadata
 
