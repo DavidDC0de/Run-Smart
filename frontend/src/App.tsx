@@ -1,6 +1,8 @@
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import LoginPage from "./pages/LoginPage";
+import NewPlanPage from "./pages/NewPlanPage";
+import PlanDetailPage from "./pages/PlanDetailPage";
 import PlansPage from "./pages/PlansPage";
 
 function ProtectedLayout() {
@@ -11,7 +13,9 @@ function ProtectedLayout() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between p-4">
-          <span className="text-lg font-bold">Run Smart</span>
+          <Link to="/" className="text-lg font-bold">
+            Run Smart
+          </Link>
           <button onClick={signOut} className="text-sm text-slate-600 hover:text-slate-900">
             Log out
           </button>
@@ -30,6 +34,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<PlansPage />} />
+        <Route path="/plans/new" element={<NewPlanPage />} />
+        <Route path="/plans/:planId" element={<PlanDetailPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
