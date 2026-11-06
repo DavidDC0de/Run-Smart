@@ -3,18 +3,36 @@ from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.models.ActivityModel import Activity
 from app.models.UserModel import User
 from app.services.strava import StravaError, get_strava_activities
 
 router = APIRouter(prefix="/strava", tags=["Strava"])
+
+
+# ----------------------------------------------------------------
+# Response models (so the frontend gets accurate types)
+# ----------------------------------------------------------------
+class StravaStatusOut(BaseModel):
+    connected: bool
+
+
+class StravaConnectOut(BaseModel):
+    url: str
+
+
+class StravaSyncOut(BaseModel):
+    activities_found: int  # how many recent activities Strava returned (any type)
+    runs_saved: int  # how many runs this user now has stored
 
 
 # ----------------------------------------------------------------
@@ -43,12 +61,12 @@ def read_state_token(state: str) -> Optional[int]:
     return payload.get("uid")
 
 
-@router.get("/status")
+@router.get("/status", response_model=StravaStatusOut)
 def strava_status(current_user: User = Depends(get_current_user)):
-    return {"connected": current_user.strava_access_token is not None}
+    return StravaStatusOut(connected=current_user.strava_access_token is not None)
 
 
-@router.get("/connect")
+@router.get("/connect", response_model=StravaConnectOut)
 def connect_strava(current_user: User = Depends(get_current_user)):
     # Returns the URL as JSON. The frontend sends the user there.
     # (A redirect can't carry the Authorization header from a browser.)
@@ -60,7 +78,7 @@ def connect_strava(current_user: User = Depends(get_current_user)):
         "scope": "activity:read_all",
         "state": create_state_token(current_user.id),
     }
-    return {"url": f"https://www.strava.com/oauth/authorize?{urlencode(params)}"}
+    return StravaConnectOut(url=f"https://www.strava.com/oauth/authorize?{urlencode(params)}")
 
 
 @router.get("/callback")
@@ -123,7 +141,7 @@ def strava_callback(
     return back_to_frontend("connected")
 
 
-@router.get("/sync")
+@router.get("/sync", response_model=StravaSyncOut)
 def sync_activities(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -136,4 +154,21 @@ def sync_activities(
     except (httpx.HTTPError, StravaError):
         raise HTTPException(status_code=502, detail="Could not fetch activities from Strava")
 
-    return {"activities_found": len(activities)}
+    runs_saved = db.query(Activity).filter(Activity.user_id == current_user.id).count()
+    return StravaSyncOut(activities_found=len(activities), runs_saved=runs_saved)
+
+
+@router.delete("/disconnect", status_code=204)
+def disconnect_strava(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Removes the link on OUR side and the runs we imported.
+    # (To also revoke access on Strava's side, remove the app in Strava's settings.)
+    db.query(Activity).filter(Activity.user_id == current_user.id).delete()
+    current_user.strava_access_token = None
+    current_user.strava_refresh_token = None
+    current_user.strava_token_expires_at = None
+    current_user.strava_athlete_id = None
+    db.commit()
+    return Response(status_code=204)

@@ -106,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/strava/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Disconnect Strava */
+        delete: operations["disconnect_strava_strava_disconnect_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plans/generate": {
         parameters: {
             query?: never;
@@ -375,6 +392,23 @@ export interface components {
             /** Pace Sec Per Km */
             pace_sec_per_km: number;
         };
+        /** StravaConnectOut */
+        StravaConnectOut: {
+            /** Url */
+            url: string;
+        };
+        /** StravaStatusOut */
+        StravaStatusOut: {
+            /** Connected */
+            connected: boolean;
+        };
+        /** StravaSyncOut */
+        StravaSyncOut: {
+            /** Activities Found */
+            activities_found: number;
+            /** Runs Saved */
+            runs_saved: number;
+        };
         /** Token */
         Token: {
             /** Access Token */
@@ -514,7 +548,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StravaStatusOut"];
                 };
             };
         };
@@ -534,7 +568,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StravaConnectOut"];
                 };
             };
         };
@@ -587,8 +621,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StravaSyncOut"];
                 };
+            };
+        };
+    };
+    disconnect_strava_strava_disconnect_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { generateManualPlan } from "../api/plans";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { generateManualPlan, generateStravaPlan } from "../api/plans";
+import { fetchStravaStatus } from "../api/strava";
 import { parsePace } from "../format";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -29,19 +30,26 @@ export default function NewPlanPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const stravaStatus = useQuery({ queryKey: ["strava-status"], queryFn: fetchStravaStatus });
+  const stravaConnected = stravaStatus.data?.connected ?? false;
+
+  const [mode, setMode] = useState<"manual" | "strava">("manual");
   const [distance, setDistance] = useState<Distance>(10);
   const [raceDate, setRaceDate] = useState("");
   const [goalMinutes, setGoalMinutes] = useState("");
   const [trainingDays, setTrainingDays] = useState(4);
   const [days, setDays] = useState<string[]>([]);
+  // manual mode
   const [avgWeeklyKm, setAvgWeeklyKm] = useState("");
   const [longestRunKm, setLongestRunKm] = useState("");
   const [weeksTrained, setWeeksTrained] = useState("4");
   const [longestRunPace, setLongestRunPace] = useState("");
+  // strava mode
+  const [current5kPace, setCurrent5kPace] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: generateManualPlan,
+    mutationFn: (createPlan: () => Promise<{ id: number }>) => createPlan(),
     onSuccess: (plan) => {
       queryClient.invalidateQueries({ queryKey: ["plans"] });
       navigate(`/plans/${plan.id}`);
@@ -56,27 +64,43 @@ export default function NewPlanPage() {
     e.preventDefault();
     setFormError(null);
 
-    const pace = parsePace(longestRunPace);
-    if (pace === null) {
-      setFormError("Enter your long-run pace as minutes:seconds per km, e.g. 6:40");
-      return;
-    }
     if (days.length < trainingDays) {
       setFormError(`Pick at least ${trainingDays} available days (you chose ${days.length}).`);
       return;
     }
 
-    mutation.mutate({
+    const shared = {
       goal_race_km: distance,
       race_date: raceDate,
       goal_time_min: Number(goalMinutes),
       training_days_per_week: trainingDays,
       available_days: days,
-      average_weekly_km: Number(avgWeeklyKm),
-      longest_run_km: Number(longestRunKm),
-      weeks_trained_last_8: Number(weeksTrained),
-      longest_run_pace: pace,
-    });
+    };
+
+    if (mode === "strava") {
+      const pace = parsePace(current5kPace);
+      if (pace === null) {
+        setFormError("Enter your current 5K pace as minutes:seconds per km, e.g. 5:30");
+        return;
+      }
+      mutation.mutate(() => generateStravaPlan({ ...shared, current_5k_pace: pace }));
+      return;
+    }
+
+    const pace = parsePace(longestRunPace);
+    if (pace === null) {
+      setFormError("Enter your long-run pace as minutes:seconds per km, e.g. 6:40");
+      return;
+    }
+    mutation.mutate(() =>
+      generateManualPlan({
+        ...shared,
+        average_weekly_km: Number(avgWeeklyKm),
+        longest_run_km: Number(longestRunKm),
+        weeks_trained_last_8: Number(weeksTrained),
+        longest_run_pace: pace,
+      }),
+    );
   }
 
   const shownError = formError ?? (mutation.isError ? mutation.error.message : null);
@@ -88,6 +112,37 @@ export default function NewPlanPage() {
         <Link to="/" className="text-sm text-slate-600 hover:underline">
           Cancel
         </Link>
+      </div>
+
+      <div className="space-y-2">
+        <span className="text-sm font-medium">Where should we get your fitness from?</span>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setMode("manual")}
+            className={`rounded-lg border px-4 py-2 text-sm ${
+              mode === "manual" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"
+            }`}
+          >
+            I'll enter it myself
+          </button>
+          <button
+            type="button"
+            disabled={!stravaConnected}
+            onClick={() => setMode("strava")}
+            className={`rounded-lg border px-4 py-2 text-sm disabled:opacity-50 ${
+              mode === "strava" ? "border-orange-500 bg-orange-500 text-white" : "border-slate-300 bg-white"
+            }`}
+          >
+            Use my Strava runs
+          </button>
+        </div>
+        {!stravaConnected && !stravaStatus.isLoading && (
+          <p className="text-xs text-slate-500">
+            Connect Strava on the <Link to="/" className="text-blue-600 hover:underline">My plans</Link> page to use
+            this option.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -172,59 +227,77 @@ export default function NewPlanPage() {
         <p className="text-xs text-slate-500">The long run goes on the last day you pick in the week.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Average weekly distance (km)</span>
-          <input
-            type="number"
-            required
-            min={0}
-            max={300}
-            step="any"
-            value={avgWeeklyKm}
-            onChange={(e) => setAvgWeeklyKm(e.target.value)}
-            className={inputClass}
-          />
-        </label>
+      {mode === "manual" ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">Average weekly distance (km)</span>
+            <input
+              type="number"
+              required
+              min={0}
+              max={300}
+              step="any"
+              value={avgWeeklyKm}
+              onChange={(e) => setAvgWeeklyKm(e.target.value)}
+              className={inputClass}
+            />
+          </label>
 
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Longest recent run (km)</span>
-          <input
-            type="number"
-            required
-            min={0}
-            max={100}
-            step="any"
-            value={longestRunKm}
-            onChange={(e) => setLongestRunKm(e.target.value)}
-            className={inputClass}
-          />
-        </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">Longest recent run (km)</span>
+            <input
+              type="number"
+              required
+              min={0}
+              max={100}
+              step="any"
+              value={longestRunKm}
+              onChange={(e) => setLongestRunKm(e.target.value)}
+              className={inputClass}
+            />
+          </label>
 
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Weeks you trained in the last 8</span>
-          <select value={weeksTrained} onChange={(e) => setWeeksTrained(e.target.value)} className={inputClass}>
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">Weeks you trained in the last 8</span>
+            <select value={weeksTrained} onChange={(e) => setWeeksTrained(e.target.value)} className={inputClass}>
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
 
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">Pace of that long run (min:sec per km)</span>
+            <input
+              type="text"
+              required
+              inputMode="numeric"
+              placeholder="6:40"
+              value={longestRunPace}
+              onChange={(e) => setLongestRunPace(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+        </div>
+      ) : (
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Pace of that long run (min:sec per km)</span>
+          <span className="text-sm font-medium">Your current 5K pace (min:sec per km)</span>
           <input
             type="text"
             required
             inputMode="numeric"
-            placeholder="6:40"
-            value={longestRunPace}
-            onChange={(e) => setLongestRunPace(e.target.value)}
+            placeholder="5:30"
+            value={current5kPace}
+            onChange={(e) => setCurrent5kPace(e.target.value)}
             className={inputClass}
           />
+          <span className="text-xs text-slate-500">
+            We'll work out your weekly distance, long runs and consistency from your synced Strava runs.
+          </span>
         </label>
-      </div>
+      )}
 
       {shownError && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{shownError}</p>}
 

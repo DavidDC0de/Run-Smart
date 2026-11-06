@@ -4,6 +4,7 @@ import LoginPage from "./pages/LoginPage";
 import NewPlanPage from "./pages/NewPlanPage";
 import PlanDetailPage from "./pages/PlanDetailPage";
 import PlansPage from "./pages/PlansPage";
+import StravaCallbackPage from "./pages/StravaCallbackPage";
 
 function ProtectedLayout() {
   const { isLoggedIn, signOut } = useAuth();
@@ -33,6 +34,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedLayout />}>
+        <Route path="/strava/callback" element={<StravaCallbackPage />} />
         <Route path="/" element={<PlansPage />} />
         <Route path="/plans/new" element={<NewPlanPage />} />
         <Route path="/plans/:planId" element={<PlanDetailPage />} />

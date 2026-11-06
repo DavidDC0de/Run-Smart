@@ -3,11 +3,16 @@ import type { components } from "./schema";
 import { currentWeekNumber } from "../format";
 
 export type ManualPlanRequest = components["schemas"]["GenerateManualPlan"];
+export type StravaPlanRequest = components["schemas"]["GeneratePlan"];
 export type PlanDetail = components["schemas"]["PlanDetailOut"];
 export type Week = components["schemas"]["WeekOut"];
 
 export function generateManualPlan(body: ManualPlanRequest) {
   return unwrap(api.POST("/plans/generate_manual", { body }));
+}
+
+export function generateStravaPlan(body: StravaPlanRequest) {
+  return unwrap(api.POST("/plans/generate", { body }));
 }
 
 // Also works out which week is "current", here and not during rendering.

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, unwrap } from "../api/client";
 import { formatDate } from "../format";
+import StravaCard from "../components/StravaCard";
 
 export default function PlansPage() {
   const { data: plans, isLoading, error } = useQuery({
@@ -14,6 +15,7 @@ export default function PlansPage() {
 
   return (
     <div className="space-y-4">
+      <StravaCard />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">My plans</h1>
         <Link to="/plans/new" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">

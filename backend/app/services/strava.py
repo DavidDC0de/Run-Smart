@@ -60,26 +60,41 @@ def get_strava_activities(user: User, db: Session):
     process_activity(activities, user, db)
     return activities
 
-def process_activity(raw_activity: dict, user: User, db: Session):
-    
+# Strava also returns rides, walks, swims... we only want runs.
+RUN_TYPES = {"Run", "TrailRun", "VirtualRun"}
+
+
+def process_activity(raw_activity: list, user: User, db: Session):
+    headers = {"Authorization": f"Bearer {user.strava_access_token}"}
+
     for run in raw_activity:
-        
+
+        activity_type = run.get("sport_type", run.get("type"))
+        if activity_type not in RUN_TYPES:
+            continue
+
         # check if activity already exists to avoid duplicates
         existing = db.query(Activity).filter(Activity.activity_id == run["id"]).first()
         if existing:
             continue
-            
-        # get heart rate zones
-        headers = {"Authorization": f"Bearer {user.strava_access_token}"}
-        zones_response = httpx.get(
-            f"https://www.strava.com/api/v3/activities/{run['id']}/zones",
-            headers=headers,
-        )
-        zones = zones_response.json()
-        
+
+        # get heart rate zones (best effort: Strava returns an error object
+        # instead of a list for non-premium accounts or when rate limited)
+        try:
+            zones_response = httpx.get(
+                f"https://www.strava.com/api/v3/activities/{run['id']}/zones",
+                headers=headers,
+                timeout=15,
+            )
+            zones = zones_response.json() if zones_response.status_code == 200 else []
+        except (httpx.HTTPError, ValueError):
+            zones = []
+        if not isinstance(zones, list):
+            zones = []
+
         zone_1 = zone_2 = zone_3 = zone_4 = zone_5 = 0
         for zone_type in zones:
-            if zone_type.get("type") == "heartrate":
+            if isinstance(zone_type, dict) and zone_type.get("type") == "heartrate":
                 buckets = zone_type.get("distribution_buckets", [])
                 if len(buckets) >= 5:
                     zone_1 = buckets[0]["time"] / 60
@@ -102,10 +117,10 @@ def process_activity(raw_activity: dict, user: User, db: Session):
             heart_rate_zone_3_minutes=zone_3,
             heart_rate_zone_4_minutes=zone_4,
             heart_rate_zone_5_minutes=zone_5,
+            activity_type=activity_type,
         )
-        
-        db.add(new_activity)
-    
-    db.commit()
 
+        db.add(new_activity)
+
+    db.commit()
     
