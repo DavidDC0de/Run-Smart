@@ -9,6 +9,9 @@ from fastapi import Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from .config import settings
+import logging
+
+logging.getLogger("passlib").setLevel(logging.ERROR)
 
 oauth2_schemas = OAuth2PasswordBearer(tokenUrl="user/login")
 

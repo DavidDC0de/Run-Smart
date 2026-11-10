@@ -25,5 +25,9 @@ export async function disconnectStrava(): Promise<void> {
   } catch {
     throw new Error("Can't reach the server. Is the backend running?");
   }
-  if (result.error !== undefined) throw new Error(errorMessage(result.error));
+  // `response.ok` always exists. The generated types have no `error` property
+  // for this endpoint (it declares no error responses), so read it through a cast.
+  if (!result.response.ok) {
+    throw new Error(errorMessage((result as { error?: unknown }).error));
+  }
 }

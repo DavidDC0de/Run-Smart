@@ -1,151 +1,80 @@
 # 🏃 Run Smart
 
+![CI](https://github.com/DavidDC0de/Run-Smart/actions/workflows/ci.yml/badge.svg)
+
 > **Train smarter, not just harder.**
 
-Run Smart is a personalised running training platform built with **FastAPI** that generates adaptive, multi-week training plans based on a runner's goal, current fitness, available training days, and target race date.
+Run Smart is a full-stack running training app. Tell it your goal race, race date, goal time, fitness and the days you can run, and it builds a personalised multi-week plan, then explains each week in plain English with AI.
 
-The project combines training analytics, personalised plan generation, Strava activity ingestion, and AI-powered workout explanations to create a personalised training experience.
+It has a **FastAPI + PostgreSQL** backend and a **React + TypeScript** frontend, with Strava integration (OAuth 2.0) for training data and OpenAI for the explanations.
 
-🔗 **Repository:** https://github.com/DavidDC0de/Run-Smart
+---
+
+## 🎬 Demo
+
+![Run Smart demo](docs/images/demo.gif)
 
 ---
 
 ## 📸 Screenshots
 
+### AI workout explanation
 
-### API Documentation
+![AI Workout Explanation](docs/images/AI_response1.png)
 
-![Swagger API Documentation](docs/images/swagger.png)
+### API documentation (Swagger)
 
-### Personalised Training Plan
-
-![Generated Training Plan](docs/images/training_plan.png)
-
-### AI Workout Explanation
-
-![AI Workout Explanation](docs/images/AI_response.png)
+![Swagger API Documentation](docs/images/FastAPI_docs.png)
 
 ---
 
-# 🚀 Features
+## 🚀 Features
 
-## 📊 Training Analytics
-
-Run Smart can connect to the **Strava API** using OAuth 2.0 and ingest historical running activities.
-
-The ingestion pipeline processes up to **100 historical activities per user** and extracts training metrics including:
-
-* Distance
-* Pace
-* Heart rate
-* Heart rate zones
-* Training load
-* Activity history
-
-Data is stored in a **normalised PostgreSQL schema**, allowing training history and performance metrics to be analysed efficiently.
-
-Users without Strava can also provide their running information manually.
+- **Adaptive plan generator**: builds a periodised plan (Base → Build → Race-specific → Taper) for a 5K, 10K, half marathon or marathon, from the race date, goal time, weekly availability and current fitness.
+- **Two ways to give your fitness**: enter it yourself, or connect **Strava** and let Run Smart work it out from your real runs.
+- **AI week-by-week explanations**: for every week, an explanation of what each session is for and how it should feel. Generated on request with the OpenAI API, then saved, so each week is only ever generated once.
+- **Weekly plan view**: all weeks in one list with the current week opened automatically, showing each session's day, type, distance and pace.
+- **Accounts**: sign up and log in with JWT authentication. Every user only ever sees their own plans.
+- **Strava integration**: connect, sync recent runs, disconnect (which also removes the imported runs).
 
 ---
 
-## 🗓️ Adaptive Training Plan Generator
+## 🧠 How the training plans work
 
-The core feature of Run Smart is a personalised training plan generator.
+```text
+Base → Build → Race-Specific → Taper
+```
 
-Users can customise inputs including:
+| Phase | Focus |
+| --- | --- |
+| **Base** | Build aerobic capacity, consistent weekly mileage and gradually longer long runs |
+| **Build** | Higher volume, plus tempo and interval sessions |
+| **Race-specific** | Prepare for the demands of the chosen distance and target pace |
+| **Taper** | Reduce volume, keep some intensity, arrive at race day fresh |
 
-* 🏁 Goal race distance
-* 📅 Race date
-* 🎯 Goal finishing time
-* 🏃 Current running pace
-* 📆 Training days per week
-* 📍 Specific days available for training
+The plan changes with the race distance, race date, goal time, current pace, training days per week and which days you can run. The long run always goes on the last day you choose in the week.
 
-The generator uses these inputs to calculate a personalised training plan that adapts to the user's requirements.
-
-### Example Input
+### Example request
 
 ```json
 {
   "goal_race_km": 21,
   "race_date": "2027-04-10",
   "training_days_per_week": 4,
-  "available_days": [
-    "Monday",
-    "Thursday",
-    "Friday",
-    "Sunday"
-  ],
+  "available_days": ["Monday", "Thursday", "Friday", "Sunday"],
   "goal_time_min": 125,
   "current_5k_pace": 400
 }
 ```
 
-The training programme is built around the runner's:
+### Example week from a generated plan
 
-* Current fitness level
-* Target race distance
-* Available preparation time
-* Goal race pace
-* Weekly availability
-
-Changing the **race distance, race date, goal time, current pace, or available training days** produces a different training programme tailored to the user.
-
----
-
-# 🧠 Training Periodisation
-
-Training plans are periodised across multiple phases:
-
-```text
-Base → Build → Race-Specific → Taper
-```
-
-### Base Phase
-
-Focuses on:
-
-* Building aerobic capacity
-* Establishing consistent weekly mileage
-* Developing endurance
-* Gradually increasing long-run distance
-
-### Build Phase
-
-Introduces:
-
-* Higher weekly training volume
-* Tempo sessions
-* Interval sessions
-* Longer endurance runs
-* Increased training load
-
-### Race-Specific Phase
-
-Focuses on preparing the runner for the demands of their specific race distance and target pace.
-
-### Taper Phase
-
-Reduces training volume while maintaining some intensity to help the runner arrive at race day recovered and prepared.
-
----
-
-# 📈 Example Generated Training Plan
-
-Using the example input above, Run Smart generates a **31-week personalised half-marathon training plan**.
-
-## Week 1 — Base Phase
-
-**Total distance: 20 km**
-
-| Day      | Session  | Distance | Target Pace |
+| Day      | Session  | Distance | Target pace |
 | -------- | -------- | -------: | ----------: |
-| Monday   | Easy Run |   4.0 km | 7:40 min/km |
+| Monday   | Easy run |   4.0 km | 7:40 min/km |
 | Thursday | Interval |   4.0 km | 6:30 min/km |
-| Friday   | Easy Run |   3.0 km | 7:40 min/km |
-| Sunday   | Long Run |   8.6 km | 7:25 min/km |
-
-### API Response
+| Friday   | Easy run |   3.0 km | 7:40 min/km |
+| Sunday   | Long run |   8.6 km | 7:25 min/km |
 
 ```json
 {
@@ -153,362 +82,275 @@ Using the example input above, Run Smart generates a **31-week personalised half
   "phase": "base",
   "total_km": 20,
   "sessions": [
-    {
-      "day": "Monday",
-      "type": "easy",
-      "distance_km": 4.0,
-      "pace_sec_per_km": 460
-    },
-    {
-      "day": "Thursday",
-      "type": "interval",
-      "distance_km": 4.0,
-      "pace_sec_per_km": 390
-    },
-    {
-      "day": "Friday",
-      "type": "easy",
-      "distance_km": 3.0,
-      "pace_sec_per_km": 460
-    },
-    {
-      "day": "Sunday",
-      "type": "long_run",
-      "distance_km": 8.6,
-      "pace_sec_per_km": 445
-    }
+    { "day": "Monday",   "type": "easy",     "distance_km": 4.0, "pace_sec_per_km": 460 },
+    { "day": "Thursday", "type": "interval", "distance_km": 4.0, "pace_sec_per_km": 390 },
+    { "day": "Friday",   "type": "easy",     "distance_km": 3.0, "pace_sec_per_km": 460 },
+    { "day": "Sunday",   "type": "long_run", "distance_km": 8.6, "pace_sec_per_km": 445 }
   ]
 }
 ```
 
----
-
-
-# 🤖 AI-Powered Workout Explanations
-
-Run Smart integrates the **OpenAI API** to generate natural-language explanations for each week of training.
-
-Rather than only returning structured JSON, the application can explain:
-
-* The purpose of each workout
-* How hard the session should feel
-* What the runner should focus on
-* Why the workout is included
-* How the session contributes to the overall race goal
-
-AI explanations are generated **one week at a time**, providing guidance for every session.
-
-### Example — Week 1
-
-**Monday — Easy Run**
-
-> Run at a relaxed, conversational pace. The goal is to build your aerobic base while allowing your body to adapt to consistent training.
-
-**Thursday — Interval Training**
-
-> Faster running segments are used to improve speed and endurance. The session should feel challenging while allowing you to maintain good running form.
-
-**Friday — Easy Run**
-
-> A lower-intensity session designed to maintain mileage while helping the body recover from the previous quality workout.
-
-**Sunday — Long Run**
-
-> The long run builds endurance and prepares the runner for the demands of the target race distance.
+Paces are stored in **seconds per km** (460 = 7:40 /km).
 
 ---
 
-# 🏃 Strava Integration
+## 🛠️ Tech stack
 
-Run Smart integrates with the **Strava API** using OAuth 2.0.
+| Area | Technology | Why |
+| --- | --- | --- |
+| API | **FastAPI**, Python | Fast to build, automatic OpenAPI docs, request validation with Pydantic |
+| Database | **PostgreSQL**, SQLAlchemy, **Alembic** | Relational data (users, runs, plans, sessions) with versioned migrations |
+| Auth | JWT, bcrypt | Stateless login, hashed passwords |
+| Integrations | **Strava API** (OAuth 2.0), **OpenAI API** | Real training data, natural-language explanations |
+| Frontend | **React**, **TypeScript**, Vite | Type safety end to end |
+| Styling | Tailwind CSS | Responsive, mobile-friendly layout |
+| Data fetching | TanStack Query, React Router | Loading/error/caching states, protected routes |
+| API client | `openapi-typescript` + `openapi-fetch` | Types generated from the backend's own OpenAPI spec |
+| Testing | pytest, Vitest | Backend against a real Postgres, frontend unit tests |
+| CI | GitHub Actions | Tests, migrations and build on every push |
+| Infrastructure | Docker (PostgreSQL) | One command for a local database |
 
-The workflow allows users to:
+---
+
+## 🏗️ Architecture
 
 ```text
-Connect Strava
-      ↓
-Authorise Application
-      ↓
-Retrieve Activity History
-      ↓
-Process Running Activities
-      ↓
-Calculate Training Metrics
-      ↓
-Generate Personalised Training Data
+        ┌──────────────────────────────┐
+        │  React + TypeScript (Vite)   │
+        │  typed client from OpenAPI   │
+        └──────────────┬───────────────┘
+                       │ HTTPS / JSON
+                       ▼
+        ┌──────────────────────────────┐
+        │           FastAPI            │
+        └──────────────┬───────────────┘
+                       │
+     ┌─────────────────┼──────────────────┐
+     ▼                 ▼                  ▼
+┌──────────┐   ┌───────────────┐   ┌──────────────┐
+│   Auth   │   │ Plan generator│   │ Strava OAuth │
+│ JWT +    │   │ + AI week     │   │ + run import │
+│ bcrypt   │   │ explanations  │   │              │
+└──────────┘   └───────┬───────┘   └──────┬───────┘
+                       │                  │
+                       ▼                  ▼
+              ┌────────────────────────────────┐
+              │  PostgreSQL (SQLAlchemy +      │
+              │  Alembic migrations)           │
+              └────────────────────────────────┘
 ```
 
-Up to **100 historical activities** can be processed for each user.
-
-The processed data can include:
-
-* Distance
-* Pace
-* Heart rate
-* Heart rate zones
-* Training load
-
-Users who do not use Strava can still generate plans through manual input.
-
----
-
-# 🔐 Authentication
-
-The API includes secure authentication using:
-
-* JWT authentication
-* Password hashing with bcrypt
-* Protected API routes
-
-Users can securely create accounts, authenticate, and access their training data and personalised plans.
-
----
-
-# 🗄️ Database
-
-Training data is stored in a normalised PostgreSQL database.
-
-The backend uses:
-
-* PostgreSQL
-* SQLAlchemy ORM
-* Alembic migrations
-
-The database supports relationships between:
-
-* Users
-* Authentication data
-* Strava connections
-* Running activities
-* Training metrics
-* Generated training plans
-* Weekly sessions
-
----
-
-# 🛠️ Tech Stack
-
-### Backend
-
-* Python
-* FastAPI
-
-### Database
-
-* PostgreSQL
-* SQLAlchemy
-* Alembic
-
-### Authentication & Security
-
-* JWT
-* bcrypt
-* OAuth 2.0
-
-### APIs
-
-* Strava API
-* OpenAI API
-
-### Development & Infrastructure
-
-* Docker
-* Dockerised PostgreSQL
-* pytest
-* GitHub Actions
-* Swagger / OpenAPI documentation
-
----
-
-# 🏗️ Project Architecture
+### Project layout
 
 ```text
-                        ┌─────────────────┐
-                        │     Client      │
-                        └────────┬────────┘
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │     FastAPI     │
-                        │       API       │
-                        └────────┬────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              ▼                  ▼                  ▼
-     ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
-     │ Authentication │ │ Training Plans │ │ Strava OAuth   │
-     │ JWT + bcrypt   │ │ Generator      │ │ Integration    │
-     └────────────────┘ └────────────────┘ └────────────────┘
-              │                  │                  │
-              └──────────────────┼──────────────────┘
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │   PostgreSQL    │
-                        │  SQLAlchemy ORM │
-                        └─────────────────┘
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │ Training Data & │
-                        │ Activity Metrics│
-                        └─────────────────┘
+Run-Smart/
+├── backend/
+│   ├── app/
+│   │   ├── api/        # routes: user, plans, strava
+│   │   ├── core/       # config, database, security
+│   │   ├── models/     # SQLAlchemy models
+│   │   ├── schemas/    # Pydantic request/response models
+│   │   ├── services/   # plan generation, Strava import, AI explanations
+│   │   └── tests/      # pytest suite
+│   ├── alembic/        # database migrations
+│   └── docker-compose.yml
+├── frontend/
+│   └── src/
+│       ├── api/        # typed API client (schema.d.ts is generated)
+│       ├── pages/      # login, plans, new plan, plan detail, Strava callback
+│       └── components/
+└── .github/workflows/ci.yml
 ```
 
 ---
 
-# 📚 API Documentation
+## 🔌 API overview
 
-FastAPI provides interactive Swagger/OpenAPI documentation.
+Interactive docs are served at `http://127.0.0.1:8000/docs` when the backend is running.
 
-Once the application is running, API documentation is available at:
-
-```text
-/docs
-```
-
-The documentation allows API endpoints to be explored and tested directly from the browser.
+| Method | Endpoint | Auth | Description |
+| --- | --- | :-: | --- |
+| `POST` | `/user/signup` | | Create an account |
+| `POST` | `/user/login` | | Log in (form-encoded; the email goes in the `username` field) |
+| `POST` | `/plans/generate_manual` | ✅ | Create a plan from manually entered fitness |
+| `POST` | `/plans/generate` | ✅ | Create a plan from synced Strava runs |
+| `GET` | `/plans` | ✅ | List your plans |
+| `GET` | `/plans/{id}` | ✅ | Get one plan with all its weeks |
+| `DELETE` | `/plans/{id}` | ✅ | Delete a plan |
+| `GET` | `/plans/{id}/weeks/{n}/explanation` | ✅ | AI explanation for a week (generated once, then cached) |
+| `GET` | `/strava/status` | ✅ | Is Strava connected? |
+| `GET` | `/strava/connect` | ✅ | Get the Strava authorisation URL |
+| `GET` | `/strava/callback` | | Strava redirects here, then on to the frontend |
+| `GET` | `/strava/sync` | ✅ | Import recent runs |
+| `DELETE` | `/strava/disconnect` | ✅ | Disconnect and remove imported runs |
+| `GET` | `/health` | | Health check |
 
 ---
 
-# 🐳 Getting Started
+## ⚙️ Engineering notes
 
-## Clone the Repository
+- **Typed end to end.** The frontend's API types are generated from the backend's OpenAPI spec. CI regenerates them and fails if the committed file is out of date, so the two sides cannot silently drift apart.
+- **Validated input.** Race distance, date range, training days, day names and pace ranges are validated, so bad input gets a clear `422` rather than a server error.
+- **Atomic plan creation.** A plan and all of its sessions are saved in one transaction: either everything is stored or nothing is.
+- **AI cost control.** Creating a plan makes no AI call. Explanations are generated only when a week is requested, then stored, so each is paid for once. Failures return a clean error and save nothing.
+- **Secure Strava flow.** The OAuth `state` is a signed, expiring token that can't be used as a login token, so a forged callback can't attach a Strava account to someone else. The callback always redirects back to the frontend with a status.
+- **Ownership checks.** Another user's plan returns `404`, not `403`, so plan IDs can't be probed.
+- **Resilient import.** Only runs are imported (not rides or walks), duplicates are skipped, and a heart-rate-zone failure (non-premium account, rate limit) doesn't stop a run from being saved.
+
+---
+
+## 🐳 Getting started
+
+**Prerequisites:** Python 3.12+, Node.js 20.19+ (or 22), Docker.
+
+### 1. Clone
 
 ```bash
 git clone https://github.com/DavidDC0de/Run-Smart.git
 cd Run-Smart
 ```
 
-## Configure Environment Variables
-
-Create a `.env` file:
-
-```env
-DATABASE_URL=
-
-JWT_SECRET_KEY=
-
-STRAVA_CLIENT_ID=
-STRAVA_CLIENT_SECRET=
-STRAVA_REDIRECT_URI=
-
-OPENAI_API_KEY=
-```
-
-> Never commit API keys, secrets, or production credentials.
-
----
-
-## Start PostgreSQL with Docker
+### 2. Start PostgreSQL
 
 ```bash
+cd backend
 docker compose up -d
 ```
 
-## Run Database Migrations
+This starts Postgres on port 5432 (user `postgres`, password `postgres`, database `runsmart`).
 
-```bash
-alembic upgrade head
+### 3. Configure the backend
+
+Copy `backend/.env.example` to `backend/.env` and fill it in:
+
+```env
+SECRET_KEY=                         # a long random string, see below
+
+DATABASE_HOSTNAME=localhost
+DATABASE_PORT=5432
+DATABASE_USERNAME=postgres
+DATABASE_PASSWORD=postgres
+DATABASE_NAME=runsmart
+
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+STRAVA_CLIENT_ID=
+STRAVA_CLIENT_SECRET=
+STRAVA_REDIRECT_URI=http://localhost:8000/strava/callback
+
+OPEN_AI_KEY=
+
+# Optional: where the Strava callback sends the browser (default shown)
+# FRONTEND_URL=http://localhost:5173
 ```
 
-## Start the API
+Generate a secret key with:
 
 ```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+> Never commit API keys, secrets or your `.env` file. The Strava keys come from [strava.com/settings/api](https://www.strava.com/settings/api) (set the Authorization Callback Domain to `localhost`); the OpenAI key is only needed for the AI explanations.
+
+### 4. Run the backend
+
+```bash
+python -m venv venv
+# Windows:        venv\Scripts\activate
+# macOS / Linux:  source venv/bin/activate
+
+pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-The API should now be running locally.
+The API is now at `http://127.0.0.1:8000` (docs at `/docs`).
 
----
+### 5. Run the frontend
 
-# 🧪 Testing
+In a second terminal:
 
-The project is actively expanding test coverage using `pytest`.
-
-Testing focuses on:
-
-* Training plan generation
-* Pace calculations
-* Training progression
-* API endpoints
-* Authentication
-* Data ingestion
-
-GitHub Actions CI is also being added to automate testing on repository changes.
-
----
-
-# 🎯 Personalisation
-
-A core goal of Run Smart is to avoid a **one-size-fits-all training programme**.
-
-The generated training plan changes depending on the user's inputs.
-
-```text
-Race Distance
-      +
-Race Date
-      +
-Goal Time
-      +
-Current Running Pace
-      +
-Training Days Per Week
-      +
-Available Days
-      ↓
-Personalised Training Plan
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-A runner can adjust their goal, schedule, and current ability, and the programme is generated accordingly.
+Open **http://localhost:5173** (use `localhost`, not `127.0.0.1`, so the Strava redirect lands on the same address). The frontend finds the API through `VITE_API_URL` in `frontend/.env`.
 
-For example, changing any of the following will affect the structure of the plan:
+If you change the backend API, regenerate the frontend types with the backend running:
 
-* Running a different race distance
-* Having more or less time before race day
-* Training on different days
-* Running more or fewer days per week
-* Having a different current fitness level
-* Targeting a different finishing time
-
-The result is a training programme built around the runner's **goal, fitness, and schedule**.
+```bash
+npm run gen:api
+```
 
 ---
 
-# 🔮 Future Development
+## 🧪 Testing
 
-Planned and ongoing improvements include:
+CI runs everything below on every push and pull request (see `.github/workflows/ci.yml`):
 
-* Increased pytest coverage
-* GitHub Actions CI
-* More advanced fitness scoring
-* Additional training metrics
-* Improved adaptive plan adjustments
-* Expanded Strava analytics
-* Enhanced AI coaching explanations
-* Additional race distances and training configurations
+| Job | What it checks |
+| --- | --- |
+| **Backend** | Migrations apply to an empty database, models and migrations are in sync, and the pytest suite passes against a real PostgreSQL |
+| **Frontend** | Lint, Vitest unit tests, TypeScript type-check and production build |
+| **API contract** | The frontend's generated API types match the backend's current OpenAPI spec |
+
+The backend suite covers sign-up and login, plan creation and validation, ownership rules, the AI explanation cache, and the Strava connect and import flow. **OpenAI and Strava are faked in the tests**, so they need no network or API keys and cost nothing.
+
+### Run the tests locally
+
+The API tests use a real Postgres database and **wipe its tables**, so they only run against a database whose name contains `test` (anything else is refused). Create an empty one first:
+
+```bash
+docker compose exec db psql -U postgres -c "CREATE DATABASE runsmart_test;"
+```
+
+Then, from `backend/`:
+
+```bash
+pip install -r requirements-dev.txt
+
+# macOS / Linux
+export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/runsmart_test
+# Windows PowerShell
+# $env:TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/runsmart_test"
+
+pytest
+```
+
+Without `TEST_DATABASE_URL` the database tests are skipped and only the pure unit tests run. For the frontend, run `npm test` in `frontend/`.
 
 ---
 
-# 💡 Motivation
+## ⚠️ Strava note
 
-Run Smart was built as a personal project combining backend engineering with an interest in endurance training.
+A new Strava API application starts in a restricted mode where only the developer's own account can connect, so the live Strava flow is shown in the demo. Everything else, including plan generation from manually entered data, works for any account.
 
-The project explores how structured running data, training principles, external APIs, and AI can be combined to generate personalised training programmes.
+---
 
-Rather than returning a static training plan, Run Smart aims to adapt the programme around the individual runner.
+## 🔮 Future development
+
+- Heart-rate-based adjustment of the fitness score, and shorter long runs in recovery weeks (both currently inactive)
+- More advanced fitness scoring and training metrics
+- Adaptive plan adjustments as the runner trains
+- Expanded Strava analytics
+- Richer AI coaching
+- Deployment
+
+---
+
+## 💡 Motivation
+
+Run Smart began as a backend project combining an interest in endurance training with API design, data modelling and third-party integrations. The frontend, tests and CI were added to make it a complete, shippable product.
 
 > **Your goal. Your pace. Your schedule. Your plan.**
 
 ---
 
-# 👨‍💻 Author
+## 👨‍💻 Author
 
-**David**
-
-🔗 https://github.com/DavidDC0de
-
----
+**David**, [github.com/DavidDC0de](https://github.com/DavidDC0de)
 
 ⭐ If you find the project interesting, consider starring the repository!
