@@ -12,7 +12,7 @@ It has a **FastAPI + PostgreSQL** backend and a **React + TypeScript** frontend,
 
 ## 🎬 Demo
 
-![Run Smart demo](docs/images/demo.gif)
+![Run Smart demo](docs/images/Run_Smart_demo.mp4)
 
 ---
 
