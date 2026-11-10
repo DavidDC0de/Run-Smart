@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the run that is still going
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (migrations + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: runsmart_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    # Dummy values: CI never talks to Strava or OpenAI (the tests fake them)
+    env:
+      DATABASE_HOSTNAME: localhost
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: runsmart_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/runsmart_test
+      SECRET_KEY: ci-only-secret
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      STRAVA_CLIENT_ID: ci-dummy
+      STRAVA_CLIENT_SECRET: ci-dummy
+      STRAVA_REDIRECT_URI: http://localhost:8000/strava/callback
+      OPEN_AI_KEY: ci-dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Migrations apply to an empty database
+        run: alembic upgrade head
+
+      - name: Models and migrations are in sync
+        run: alembic check
+
+      - name: Run tests
+        run: pytest -v
+
+  frontend:
+    name: Frontend (lint + tests + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: Type-check and build
+        run: npm run build
+
+  api-contract:
+    name: Frontend API types match the backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      DATABASE_HOSTNAME: localhost
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: runsmart_test
+      SECRET_KEY: ci-only-secret
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      STRAVA_CLIENT_ID: ci-dummy
+      STRAVA_CLIENT_SECRET: ci-dummy
+      STRAVA_REDIRECT_URI: http://localhost:8000/strava/callback
+      OPEN_AI_KEY: ci-dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Export the OpenAPI spec from the backend
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          python -c "import json; from app.main import app; print(json.dumps(app.openapi()))" > "$RUNNER_TEMP/openapi.json"
+
+      - name: Generate types from it
+        working-directory: frontend
+        run: |
+          npm ci
+          npx openapi-typescript "$RUNNER_TEMP/openapi.json" -o "$RUNNER_TEMP/schema.d.ts"
+
+      - name: Compare with the committed types
+        run: |
+          if ! diff -u frontend/src/api/schema.d.ts "$RUNNER_TEMP/schema.d.ts"; then
+            echo "::error::frontend/src/api/schema.d.ts is out of date. Start the backend and run 'npm run gen:api' in frontend/, then commit the result."
+            exit 1
+          fi
